@@ -1,0 +1,98 @@
+#!/usr/bin/python
+
+import os
+import collections
+import fnmatch 
+import time
+import datetime
+import signal
+import sys
+
+def main():
+
+	tape_list = []
+	tape_stats = []
+	dev_dir = '/sys/class/scsi_tape'
+
+	found_files = os.listdir(dev_dir)
+	signal.signal(signal.SIGINT, signal_handler)
+
+	for found_file in found_files:
+		if fnmatch.fnmatch(found_file, 'st*[0-9]'):
+			tape_list.append(found_file)
+
+	cur_tape_stats = retrieve_tape_stats(dev_dir,tape_list)
+
+	while True:
+
+		prev_tape_stats = cur_tape_stats
+		cur_tape_stats = retrieve_tape_stats(dev_dir,tape_list)
+
+		calc_tape_stats(prev_tape_stats,cur_tape_stats)
+
+		time.sleep(1)
+		print datetime.datetime.now() 
+		
+
+def calc_tape_stats(prev_tape_stats, cur_tape_stats):
+	
+	for stat1,stat2 in zip(prev_tape_stats,cur_tape_stats):
+
+		print stat1['tape']+"\t wrMBps: " + str(float((int(stat2['write_byte_cnt']) - int(stat1['write_byte_cnt']))/1024/1024)) + "\t wrGB: " + str(int(stat2['write_byte_cnt'])/1024/1024/1024) + "\t wrIOPS: " + stat2['write_cnt']
+			
+
+def signal_handler(signal, frame):
+	print('You pressed Ctrl+C!')
+	sys.exit(0)
+
+
+def retrieve_tape_stats(dev_dir,tape_list):
+
+	tape_stat = {}
+	tape_stats = []
+
+	for tape in tape_list:
+
+		stat_dir = dev_dir + '/' + tape + '/stats'
+
+		# total bytes read 	
+		with open(stat_dir+'/read_byte_cnt', 'r') as f:
+    			read_byte_cnt = f.readline()
+		f.close()
+		
+		# total bytes write
+        	with open(stat_dir+'/write_byte_cnt', 'r') as f:
+                	write_byte_cnt = f.readline()
+		f.close()
+
+		# total iops read
+                with open(stat_dir+'/read_cnt', 'r') as f:
+                        read_cnt = f.readline()
+                f.close()
+	
+		# total iops write
+                with open(stat_dir+'/write_cnt', 'r') as f:
+                        write_cnt = f.readline()
+                f.close()
+
+		# overall response time
+                with open(stat_dir+'/io_ns', 'r') as f:
+                        io_ns = f.readline()
+                f.close()
+
+                # read response time
+                with open(stat_dir+'/read_ns', 'r') as f:
+                        read_ns = f.readline()
+                f.close()
+
+                # write response time
+                with open(stat_dir+'/write_ns', 'r') as f:
+                        write_ns = f.readline()
+                f.close()
+
+		tape_stat = {'tape':tape, 'read_byte_cnt':read_byte_cnt, 'write_byte_cnt':write_byte_cnt, 'read_cnt':read_cnt, 'write_cnt':write_cnt, 'io_ns':io_ns, 'read_ns':read_ns, 'write_ns':write_ns}
+		tape_stats.append(tape_stat)
+		
+	return tape_stats
+main()
+
